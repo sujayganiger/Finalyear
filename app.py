@@ -1,3 +1,4 @@
+%%writefile app.py
 # --- Standard Library Imports ---
 import pickle
 import os # Import os to access environment variables
