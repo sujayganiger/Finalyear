@@ -881,14 +881,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1]['answer']
 st.sidebar.title("About")
 st.sidebar.info(
     "This AI-powered chatbot is built to assist users with fast, accurate legal information based on the Indian Constitution and important legal Acts such as the IPC, CrPC, Evidence Act, and more. Whether you're preparing for the AIBE (All India Bar Examination), studying law, or practicing as a legal professional, this tool is designed to simplify your legal research by delivering clear answers to your queries — one Article or one Act section at a time.\n\n"
-    "It retrieves relevant context from a pre-indexed corpus (Constitution Articles, Legal Act Sections) using semantic search and direct lookup, and uses the language model to generate an answer based *only* on the retrieved text.\n\n"
-    "The embedding model ('paraphrase-multilingual-mpnet-base-v2') is loaded directly from Hugging Face at runtime, avoiding the need to store its large files in your Git repository.\n\n"
-    "**To run this:**\n"
-    "1. Ensure you have run the data preparation script separately to create the `data` folder with `article_map.pkl`, `act_sections_map.pkl`, `act_names.pkl`, `semantic_chunks.pkl`, and `faiss_index.bin`.\n"
-    "2. Add your Gemini API key as a Colab Secret named `GOOGLE_API_KEY` (🔑 icon) or set it as an environment variable `GOOGLE_API_KEY` when running outside Colab.\n"
-    "3. If in Colab, run the cell with `%%writefile app.py`.\n"
-    "4. If in Colab, run the launch command (e.g., `!GOOGLE_API_KEY=\"$GOOGLE_API_KEY\" streamlit run app.py & npx localtunnel --port 8501`).\n"
-    "5. Click the generated URL."
+    "The chatbot offers a user-friendly interface where you can ask questions like “What does Article 19 say?” or “Explain Section 300 of IPC.” It responds instantly using official legal texts, making it a valuable resource for revision, case preparation, and academic learning. Please note: to maintain precision and clarity, the chatbot supports only one Article or one Act-based question at a time."
 )
 
 st.sidebar.title("Examples")
