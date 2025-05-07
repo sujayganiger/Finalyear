@@ -7,7 +7,7 @@ import traceback
 # --- Third-party Imports ---
 import numpy as np
 import faiss
-from sentence_transformers import SentenceTransformer # Keep this import
+from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 import streamlit as st # Import streamlit
 
@@ -35,16 +35,14 @@ except ImportError:
 # --- RAG Data Loading (Modified for Streamlit Caching) ---
 @st.cache_resource # Cache this function's result to avoid reloading data on each rerun
 def load_rag_data():
-    """Loads the RAG data components and the Sentence Transformer model from Hugging Face."""
+    """Loads the RAG data components."""
     try:
-        with st.spinner("📂 Loading saved RAG data and embedding model..."):
-            print("📂 Loading saved data and embedding model...") # Print to console for debugging if needed
+        with st.spinner("📂 Loading saved RAG data..."):
+            print("📂 Loading saved data...") # Print to console for debugging if needed
 
-            # List of required data files (excluding the local model directory)
-            required_data_files = ['data/article_map.pkl', 'data/act_sections_map.pkl', 'data/act_names.pkl',
-                                   'data/semantic_chunks.pkl', 'data/faiss_index.bin']
-
-            for f in required_data_files:
+            required_files = ['data/article_map.pkl', 'data/act_sections_map.pkl', 'data/act_names.pkl',
+                              'data/semantic_chunks.pkl', 'data/faiss_index.bin', 'data/sentence_transformer']
+            for f in required_files:
                 if not os.path.exists(f):
                     st.error(f"❌ Required data file not found: {f}")
                     st.info("Please ensure you have run the data preparation steps and placed the 'data' folder in the same directory as the app.")
@@ -52,48 +50,35 @@ def load_rag_data():
                     print(f"❌ Required data file not found: {f}")
                     return None
 
-            # --- Load data files ---
             with open('data/article_map.pkl', 'rb') as f:
                 article_map = pickle.load(f)
-            print("✓ Loaded data/article_map.pkl")
 
             with open('data/act_sections_map.pkl', 'rb') as f:
                 act_sections_map = pickle.load(f)
-            print("✓ Loaded data/act_sections_map.pkl")
 
             with open('data/act_names.pkl', 'rb') as f:
                 act_names = pickle.load(f)
-            print("✓ Loaded data/act_names.pkl")
 
             with open('data/semantic_chunks.pkl', 'rb') as f:
                 semantic_chunks = pickle.load(f)
-            print("✓ Loaded data/semantic_chunks.pkl")
 
             faiss_index = faiss.read_index('data/faiss_index.bin')
-            print("✓ Loaded data/faiss_index.bin")
 
-            # --- Load SentenceTransformer model directly from Hugging Face ---
-            # IMPORTANT: Use the SAME model name that was used to build the FAISS index
-            model_name = 'paraphrase-multilingual-mpnet-base-v2'
-            print(f"Loading Sentence Transformer model '{model_name}' from Hugging Face...")
-            try:
-                 embedder = SentenceTransformer(model_name) # Loading from Hugging Face
-                 print(f"✅ Sentence transformer model '{model_name}' loaded successfully from Hugging Face!")
-            except Exception as e:
-                 st.error(f"❌ Error loading Sentence Transformer model '{model_name}' from Hugging Face: {str(e)}")
-                 st.info("Please check your internet connection or ensure the model name is correct.")
+            embedder_path = 'data/sentence_transformer'
+            if not os.path.exists(embedder_path):
+                 st.error(f"❌ Sentence transformer model not found at {embedder_path}")
+                 st.info("Please ensure you have run the data preparation steps and placed the 'data' folder in the same directory as the app.")
                  # Console print
-                 print(f"❌ Error loading Sentence Transformer model '{model_name}': {str(e)}")
-                 traceback.print_exc()
+                 print(f"❌ Sentence transformer model not found at {embedder_path}")
                  return None
-            # --- End Loading from Hugging Face ---
+            embedder = SentenceTransformer(embedder_path)
 
-            st.success("✅ RAG Data and Embedding Model loaded successfully!")
+            st.success("✅ RAG Data loaded successfully!")
             # Console print
-            print("✅ Data and Model loaded successfully!")
+            print("✅ Data loaded successfully!")
             return {
                 'faiss_index': faiss_index,
-                'embedder': embedder, # Pass the loaded embedder
+                'embedder': embedder,
                 'semantic_chunks': semantic_chunks,
                 'article_map': article_map,
                 'act_sections_map': act_sections_map,
@@ -101,10 +86,10 @@ def load_rag_data():
             }
 
     except Exception as e:
-        st.error(f"Error loading RAG data or embedding model: {str(e)}")
+        st.error(f"Error loading RAG data: {str(e)}")
         st.exception(e) # Show traceback in Streamlit
         # Console print
-        print(f"Error loading data or embedding model: {str(e)}")
+        print(f"Error loading data: {str(e)}")
         traceback.print_exc()
         return None
 
@@ -116,12 +101,19 @@ def load_gemini_pro():
         print("🤖 Loading Gemini language model...") # Console print
 
         # --- Use Environment Variable for API Key ---
+        # API key should be passed as an environment variable named 'GOOGLE_API_KEY'
+        # This is the standard way to pass config/secrets to processes.
+        # When running in Colab using the recommended launch method, the key
+        # is fetched from Colab Secrets in the launch cell and passed as an env var.
         api_key = os.environ.get('GOOGLE_API_KEY')
 
         if not api_key:
             st.error("❌ GOOGLE_API_KEY environment variable not set.")
             st.warning("Please ensure your API key is set as the GOOGLE_API_KEY environment variable when running this app.")
+            # Console print
             print("❌ GOOGLE_API_KEY environment variable not set.")
+            # If running in Colab and using the standard launch method,
+            # this indicates the launch cell didn't correctly pass the key.
             st.info("If running in Google Colab, please check that your 'GOOGLE_API_KEY' secret is set and the launch command correctly passes it as an environment variable.")
             return None
         # --------------------------------------
@@ -132,50 +124,45 @@ def load_gemini_pro():
 
             # Test connection
             try:
+                # Using a minimal API call to verify the key and connection
                 model.count_tokens("test connection")
             except Exception as e:
                  st.error(f"Error connecting to Gemini API. Please check your API key and network.")
                  st.warning(f"Details: {e}")
+                 # Console print
                  print(f"Error connecting to Gemini API: {e}")
                  return None
 
             st.success("✅ Gemini 2.0 Flash model loaded successfully!")
+            # Console print
             print("✅ Gemini 2.0 Flash model loaded successfully!")
             return model
         except Exception as e:
             st.error(f"Error loading Gemini 2.0 Flash model or configuring API: {str(e)}")
             st.exception(e) # Show traceback
             st.warning("Please ensure your `GOOGLE_API_KEY` is correct and valid.")
+            # Console print
             print(f"Error loading Gemini 2.0 Flash model or connecting to API: {str(e)}")
             traceback.print_exc()
             return None
 
 
 # --- Original RAG Helper Functions (Copy-Pasted - No changes needed here) ---
-# These functions were already provided and should work with the new loading method
 def is_legal_act_query(query, act_names):
     lower_q = query.lower()
     for act_name in act_names:
-        # Use case-insensitive matching for act names from the list
-        # Also handle shortened names used in mapping
-        cleaned_act_name = re.sub(r',\s*\d{4}$', '', act_name).strip().lower()
-        escaped_act_name = re.escape(cleaned_act_name)
-        # Look for the act name as a whole word
+        escaped_act_name = re.escape(act_name.lower())
         if re.search(r'\b' + escaped_act_name + r'\b', lower_q):
             return True
-    # Also check for section number format common in acts if no specific act name was found
     section_pattern = r'\bsection\s+(\d+)([a-z]?)'
     if re.search(section_pattern, lower_q):
-         # Ensure it's not part of an Article reference
          if not re.search(r'\barticle\s+\d+[a-z]?.*?\bsection\s+', lower_q):
             return True
     return False
 
-
 def is_article_specific_query(query):
     lower_q = query.lower()
-    # Pattern to match "article" followed by digits and optional letter (case insensitive)
-    article_pattern = r'\barticle\s+(\d+[a-z]?)\b'
+    article_pattern = r'\barticle\s+(\d+[a-z]?)'
     match = re.search(article_pattern, lower_q)
     if match:
         return True, match.group(1)
@@ -183,47 +170,27 @@ def is_article_specific_query(query):
 
 def is_direct_text_request(question):
     lower_q = question.lower()
-    # Refined patterns to be more precise and handle both article and section requests
     direct_text_patterns = [
-        r'what does (?:article|section) \d+[a-z]? state',
-        r'what does (?:article|section) \d+[a-z]? say',
-        r'what is (?:article|section) \d+[a-z]?\b',
-        r'state (?:article|section) \d+[a-z]?',
-        r'text of (?:article|section) \d+[a-z]?',
-        r'content of (?:article|section) \d+[a-z]?',
-        r'provide the text of (?:article|section) \d+[a-z]?'
+        r'what does article \d+[a-z]? state', r'what does article \d+[a-z]? say', r'what is article \d+[a-z]?\b',
+        r'state article \d+[a-z]?', r'what is the title of article \d+[a-z]?', r'text of article \d+[a-z]?',
+        r'content of article \d+[a-z]?', r'what does section \d+[a-z]? state', r'what does section \d+[a-z]? say',
+        r'what is section \d+[a-z]?\b', r'state section \d+[a-z]?', r'what is the title of section \d+[a-z]?',
+        r'text of section \d+[a-z]?', r'content of section \d+[a-z]?'
     ]
-    # Add patterns for asking for title specifically
-    title_patterns = [
-        r'what is the title of (?:article|section) \d+[a-z]?',
-        r'title of (?:article|section) \d+[a-z]?'
-    ]
-
-    for pattern in direct_text_patterns + title_patterns:
+    for pattern in direct_text_patterns:
         if re.search(pattern, lower_q):
             return True
     return False
 
 def is_explanation_request(question):
     lower_q = question.lower()
-    # Refined patterns for explanation requests
     explanation_patterns = [
-        r'explain (?:article|section) \d+[a-z]?',
-        r'explain about (?:article|section) \d+[a-z]?',
-        r'explanation of (?:article|section) \d+[a-z]?',
-        r'(?:article|section) \d+[a-z]? explanation',
-        r'(?:article|section) \d+[a-z]? in detail',
-        r'(?:article|section) \d+[a-z]? in brief',
-        r'(?:article|section) \d+[a-z]? briefly',
-        r'brief (?:article|section) \d+[a-z]?',
-        r'(?:article|section) \d+[a-z]? deals with',
-        r'what does (?:article|section) \d+[a-z]? deal with',
-        r'meaning of (?:article|section) \d+[a-z]?',
-        r'(?:article|section) \d+[a-z]? meaning',
-        r'elaborate (?:on )?(?:article|section) \d+[a-z]?',
-        r'completely explain (?:article|section) \d+[a-z]?',
-        r'simplify (?:article|section) \d+[a-z]?',
-        r'summar(?:y|ize) (?:article|section) \d+[a-z]?'
+        r'explain article \d+[a-z]?', r'explain about article \d+[a-z]?', r'explanation of article \d+[a-z]?',
+        r'article \d+[a-z]? explanation', r'article \d+[a-z]? in detail', r'article \d+[a-z]? in brief',
+        r'article \d+[a-z]? briefly', r'brief article \d+[a-z]?', r'article \d+[a-z]? deals with',
+        r'what does article \d+[a-z]? deal with', r'meaning of article \d+[a-z]?', r'article \d+[a-z]? meaning',
+        r'elaborate article \d+[a-z]?', r'elaborate on article \d+[a-z]?', r'completely explain article \d+[a-z]?',
+        r'simplify article \d+[a-z]?', r'summary of article \d+[a-z]?', r'summarize article \d+[a-z]?'
     ]
     for pattern in explanation_patterns:
         if re.search(pattern, lower_q):
@@ -235,229 +202,131 @@ def is_followup_question(question, chat_history):
     if not chat_history:
         return False, None
     lower_q = question.lower()
-    # Check for common pronoun/reference words
-    followup_patterns = [r'\bit\b', r'\bthis\b', r'\bthose\b', r'\bthat\b', r'\bthese\b', r'\bthe article\b', r'\bthe section\b']
-
-    # Check if any followup patterns are in the question AND if the last turn contained a reference
-    last_entry = chat_history[-1]
-    last_article_ref = last_entry.get('article_reference')
-    last_section_ref = last_entry.get('section_reference')
-    last_act_name_ref = last_entry.get('act_name_reference') # Might need to store this in the processing loop if possible
-
-    is_pronoun_followup = any(re.search(pattern, lower_q) for pattern in followup_patterns)
-
-    if is_pronoun_followup:
-        if last_article_ref:
-            # Return the article number from the previous turn
-            print(f"Detected pronoun-based follow-up, previous turn referenced Article {last_article_ref}")
-            return True, f"Article {last_article_ref}"
-        elif last_section_ref:
-             # Try to find the Act name from the previous turn's question if available
-             act_name_from_prev_q = None
-             prev_question = last_entry.get('question', '').lower()
-             # Look for an act name in the previous question
-             # Use the act_names list from the loaded data
-             # (Assume act_names is accessible globally or passed - let's ensure it's passed or accessible)
-             # For simplicity, let's pass act_names to this function
-             # (Wait, act_names is in rag_system_data, which is global after load. Access it directly)
-             global rag_system_data # Declare global usage
-             if rag_system_data and rag_system_data.get('act_names'):
-                 for act_name_check in rag_system_data['act_names']:
-                     # Use the same cleaned name logic as is_legal_act_query
-                     cleaned_act_name_check = re.sub(r',\s*\d{4}$', '', act_name_check).strip().lower()
-                     if re.search(r'\b' + re.escape(cleaned_act_name_check) + r'\b', prev_question):
-                         act_name_from_prev_q = act_name_check
-                         break
-
-             if act_name_from_prev_q:
-                  print(f"Detected pronoun-based follow-up, previous turn referenced {act_name_from_prev_q} Section {last_section_ref}")
-                  return True, f"{act_name_from_prev_q} Section {last_section_ref}"
-             else:
-                  print(f"Detected pronoun-based follow-up, previous turn referenced Section {last_section_ref} (Act name not found in previous turn)")
-                  return True, f"Section {last_section_ref}" # Just return section if Act name isn't clear
-
-    return False, None # Not a recognized follow-up or no relevant reference in history
-
+    followup_patterns = [r'\bit\b', r'\bthis\b', r'\bthose\b', r'\bthat\b', r'\bthe article\b', r'\bthese\b', r'\bthe section\b']
+    for pattern in followup_patterns:
+        if re.search(pattern, lower_q):
+            last_entry = chat_history[-1]
+            last_question = last_entry['question']
+            is_article, article_num = is_article_specific_query(last_question)
+            if is_article:
+                return True, article_num
+            section_match = re.search(r'\bsection\s+(\d+)([a-z]?)', last_question.lower())
+            if section_match:
+                section_num = section_match.group(1) + (section_match.group(2) if section_match.group(2) else "")
+                return True, f"section {section_num}" # Return section number as reference
+    return False, None
 
 # Modified get_context to accept chat_history as an argument
 def get_context(question, faiss_index, embedder, semantic_chunks, article_map, act_sections_map, act_names, chat_history):
     lower_q = question.lower()
     context_chunks = []
-    retrieved_keys = set() # Keep track of keys already retrieved directly
+    retrieved_keys = set()
 
     # Check if it's a follow-up question and modify the question if needed
-    # The follow-up logic now returns the reference (e.g., "Article 21" or "IPC Section 302")
-    is_followup, reference_text = is_followup_question(question, chat_history)
-
-    # --- Direct Lookup Logic ---
-    # Prioritize direct lookup for specific article or section references,
-    # including references identified in follow-up questions.
-
-    # Check if the *current* question or the *follow-up reference* specifies an article number
-    is_article_query_curr, article_num_curr = is_article_specific_query(question)
-    is_article_query_followup = False
-    article_num_followup = None
-
-    if reference_text:
-        is_article_query_followup, article_num_followup = is_article_specific_query(reference_text)
-
-    # If an article number is found either in the current query or the follow-up reference
-    if (is_article_query_curr and article_num_curr) or (is_article_query_followup and article_num_followup):
-         article_num_to_lookup = article_num_curr if is_article_query_curr else article_num_followup
-         print(f"Attempting direct lookup for Article: {article_num_to_lookup}")
-         # Try lookup with various casing/spacing options
-         article_key_variants = [f"article {article_num_to_lookup.lower()}", f"article {article_num_to_lookup.upper()}", f"Article {article_num_to_lookup}"]
-         if article_num_to_lookup.isdigit(): # Add numeric-only lookup if applicable
-              article_key_variants.append(f"article {article_num_to_lookup}")
-
-         for key in article_key_variants:
-             if key in article_map:
-                 print(f"Found direct article match in map: {key}. Retrieving specific text.")
-                 # Return ONLY the direct match for verbatim requests or specific explanations
-                 # For other types of queries, we might want to include semantic context too.
-                 # Let's add the direct match to context_chunks but *also* proceed to semantic search
-                 # unless it's clearly a verbatim text request.
-                 # This is a design choice: pure direct lookup vs. hybrid.
-                 # Let's stick to the previous logic: if direct article found, just return that unless it's empty.
-                 if article_map[key].strip(): # Check if the retrieved text is not empty
-                      print("Returning direct article text.")
-                      return [article_map[key]]
-                 else:
-                      print(f"Warning: Direct article match found for {key} but text is empty. Proceeding to semantic search.")
-                      # Don't add empty text to context_chunks, proceed to semantic search.
-                      break # Exit loop, move to semantic search
-
-         print(f"Direct lookup for Article {article_num_to_lookup} failed or returned empty text. Proceeding to semantic search.")
+    is_followup, reference = is_followup_question(question, chat_history)
+    if is_followup and reference:
+        print(f"Detected follow-up question referring to: {reference}") # Console print
+        if re.match(r'^\d+[a-z]?$', reference): # Article number
+            expanded_question = question.replace("it", f"Article {reference}")
+            expanded_question = re.sub(r'\bthis\b', f"Article {reference}", expanded_question)
+            expanded_question = re.sub(r'\bthe article\b', f"Article {reference}", expanded_question)
+            question = expanded_question
+            lower_q = question.lower()
+            print(f"Expanded question: {expanded_question}") # Console print
+        elif "section" in reference.lower(): # Section
+             section_match_in_ref = re.search(r'\bsection\s+(\d+)([a-z]?)', reference.lower())
+             if section_match_in_ref:
+                  section_num_ref = section_match_in_ref.group(1) + (section_match_in_ref.group(2) if section_match_in_ref.group(2) else "")
+                  act_name_from_history = None
+                  for entry in reversed(chat_history): # Look back in history for Act name
+                      # Check if the previous turn referred to this section number
+                      if entry.get('section_reference') == section_num_ref:
+                          # Then try to find an Act name in that previous question
+                          for act_name_check in act_names:
+                              if re.search(r'\b' + re.escape(act_name_check.lower()) + r'\b', entry['question'].lower()):
+                                  act_name_from_history = act_name_check
+                                  break
+                          if act_name_from_history: break # Found relevant info, stop looking
+                  if act_name_from_history:
+                       full_reference = f"{act_name_from_history} section {section_num_ref}"
+                       expanded_question = question.replace("it", full_reference)
+                       expanded_question = re.sub(r'\bthis\b', full_reference, expanded_question)
+                       expanded_question = re.sub(r'\bthe section\b', full_reference, expanded_question)
+                       question = expanded_question
+                       lower_q = question.lower()
+                       print(f"Expanded question with Act from history: {expanded_question}") # Console print
+                  else:
+                       # If no specific Act found in history for that section, just use the section number reference
+                       expanded_question = question.replace("it", reference) # 'reference' is just "section N"
+                       expanded_question = re.sub(r'\bthis\b', reference, expanded_question)
+                       expanded_question = re.sub(r'\bthe section\b', reference, expanded_question)
+                       question = expanded_question
+                       lower_q = question.lower()
+                       print(f"Expanded question (section, no Act found in history): {expanded_question}") # Console print
 
 
-    # Check if the *current* question or the *follow-up reference* specifies an act section
-    is_legal_act_query_curr = is_legal_act_query(question, act_names) # Checks for section number implicitly
-    is_legal_act_query_followup = False
-    section_num_followup = None
-    act_name_followup = None
+    is_article_query, article_num = is_article_specific_query(question)
+    if is_article_query and article_num:
+        article_key_variants = [f"article {article_num}", f"article {article_num.lower()}", f"Article {article_num}", f"Article {article_num.upper() if article_num.isalpha() else article_num}"]
+        for key in article_key_variants:
+            if key in article_map:
+                print(f"Found direct article match: {key}. Retrieving specific text.") # Console print
+                return [article_map[key]] # Direct match found, return only this
 
-    if reference_text:
-         # Check if the reference looks like a section number
-         section_match_ref = re.search(r'\bsection\s+(\d+)([a-z]?)', reference_text.lower())
-         if section_match_ref:
-              is_legal_act_query_followup = True
-              section_num_followup = section_match_ref.group(1) + (section_match_ref.group(2) if section_match_ref.group(2) else "")
-              # Try to extract Act name from the reference_text if present
-              for act_name_check in act_names:
-                   cleaned_act_name_check = re.sub(r',\s*\d{4}$', '', act_name_check).strip().lower()
-                   if re.search(r'\b' + re.escape(cleaned_act_name_check) + r'\b', reference_text.lower()):
-                        act_name_followup = act_name_check
-                        break
+    is_legal_act_query_flag = is_legal_act_query(lower_q, act_names)
+    if is_legal_act_query_flag:
+        section_match = re.search(r'\bsection\s+(\d+)([a-z]?)', lower_q)
+        if section_match:
+            section_num = section_match.group(1) + (section_match.group(2) if section_match.group(2) else "")
+            # Try to find a specific Act mention in the query as well
+            act_match_in_query = None
+            for act_name in act_names:
+                 escaped_act_name = re.escape(act_name.lower())
+                 if re.search(r'\b' + escaped_act_name + r'\b', lower_q):
+                    act_match_in_query = act_name
+                    break # Found the first matching act name
 
+            if act_match_in_query:
+                 section_key_variants = [f"{act_match_in_query} section {section_num}", f"{act_match_in_query.lower()} section {section_num.lower()}"] # Add more variations if needed
+                 for key in section_key_variants:
+                     if key in act_sections_map:
+                         print(f"Found direct Act Section match: {key}. Retrieving specific text.") # Console print
+                         return [act_sections_map[key]] # Direct match found, return only this
 
-    # If a section is found either in the current query or the follow-up reference
-    if is_legal_act_query_curr or is_legal_act_query_followup:
-        # Get the section number and potentially act name from the current query first
-        section_num_curr = None
-        act_name_curr = None
-        section_match_curr = re.search(r'\bsection\s+(\d+)([a-z]?)', lower_q)
-        if section_match_curr:
-             section_num_curr = section_match_curr.group(1) + (section_match_curr.group(2) if section_match_curr.group(2) else "")
-             # Try to find an Act name in the *current* query
-             for act_name_check in act_names:
-                 cleaned_act_name_check = re.sub(r',\s*\d{4}$', '', act_name_check).strip().lower()
-                 if re.search(r'\b' + re.escape(cleaned_act_name_check) + r'\b', lower_q):
-                      act_name_curr = act_name_check
-                      break
+            # If no specific Act + Section match, but a section number was mentioned
+            # We could potentially fall through to semantic search, but the original logic
+            # seemed to *try* to find a section match without the Act name. Let's keep that logic.
+            # Loop through all section keys to find a match based on number alone
+            for key, value in act_sections_map.items():
+                section_match_in_key = re.search(r'\bsection\s+(\d+)([a-z]?)', key.lower())
+                if section_match_in_key:
+                    key_section_num = section_match_in_key.group(1) + section_match_in_key.group(2)
+                    if key_section_num.lower() == section_num.lower():
+                         print(f"Found Section match (by number alone): {key}. Retrieving specific text.") # Console print
+                         # Decide whether to return *all* matches or just the first.
+                         # Returning the first is simpler and matches the article logic.
+                         return [value]
+            # If a section number was in the query but *no* section context was found by direct lookup
+            print(f"Section number {section_num} detected in query, but no direct Act or Section match found. Proceeding to semantic search.")
 
-
-        section_num_to_lookup = section_num_curr if section_num_curr else section_num_followup
-        act_name_to_lookup = act_name_curr if act_name_curr else act_name_followup
-
-        if section_num_to_lookup:
-             print(f"Attempting direct lookup for Section: {section_num_to_lookup} (Act: {act_name_to_lookup if act_name_to_lookup else 'any/from history'})")
-
-             found_direct_section_match = False
-             # Prioritize looking up with the specific act name if available
-             if act_name_to_lookup:
-                 print(f"Trying lookup with Act: {act_name_to_lookup}")
-                 cleaned_act_name = re.sub(r',\s*\d{4}$', '', act_name_to_lookup).strip()
-                 section_key_variants_with_act = [
-                     f"{act_name_to_lookup.lower()} section {section_num_to_lookup.lower()}",
-                     f"{cleaned_act_name.lower()} section {section_num_to_lookup.lower()}",
-                     f"section {section_num_to_lookup.lower()} {act_name_to_lookup.lower()}",
-                     f"section {section_num_to_lookup.lower()} {cleaned_act_name.lower()}"
-                 ]
-                 for key in section_key_variants_with_act:
-                      if key in act_sections_map:
-                          if act_sections_map[key].strip():
-                               print(f"Found direct Act Section match: {key}. Retrieving specific text.")
-                               return [act_sections_map[key]] # Direct match found, return only this
-                          else:
-                               print(f"Warning: Direct Act Section match found for {key} but text is empty.")
-                          found_direct_section_match = True # Indicate we tried/found a match, even if empty
-                          break # Stop looking with act name if a match was attempted
-
-             # If no specific act name was provided or found, or lookup with act name failed, try looking up by section number alone
-             # (This might return a section from a less relevant act if numbers overlap)
-             if not found_direct_section_match:
-                 print(f"Trying lookup by Section number alone: {section_num_to_lookup}")
-                 # Loop through all section keys to find a match based on number alone
-                 # Iterate over map items to get both key and value
-                 for key, value in act_sections_map.items():
-                     # Extract section number from map key
-                     section_match_in_key = re.search(r'\bsection\s+(\d+)([a-z]?)', key.lower())
-                     if section_match_in_key:
-                         key_section_num = section_match_in_key.group(1) + (section_match_in_key.group(2) if section_match_in_key.group(2) else "")
-                         if key_section_num.lower() == section_num_to_lookup.lower():
-                              if value.strip():
-                                   print(f"Found Section match (by number alone): {key}. Retrieving specific text.")
-                                   # Returning the first match found by number alone
-                                   return [value]
-                              else:
-                                   print(f"Warning: Section match by number alone found for {key} but text is empty.")
-                              found_direct_section_match = True # Indicate we found a match by number
-
-                 # If a section number was in the query/reference but *no* section context was found by direct lookup
-                 if section_num_curr or section_num_followup: # Only print this if a section number was actually looked for
-                      print(f"Direct lookup for Section {section_num_to_lookup} failed or returned empty text. Proceeding to semantic search.")
-        else: # is_legal_act_query was true, but no section number found (only Act name mentioned)
-             print(f"Legal act name detected ('{act_name_to_lookup}' from query/history), but no specific section number found. Proceeding to semantic search.")
-
+        elif is_legal_act_query_flag and not context_chunks: # Legal act name mentioned but no section
+            print("Legal act name detected, no specific section found. Proceeding to semantic search.")
 
     # If no direct Article or Section lookup returned context, perform semantic search
-    if not context_chunks: # This condition is now only true if direct lookup failed or wasn't attempted
+    if not context_chunks:
         print("Using semantic search...") # Console print
         try:
-            # Ensure embedder is loaded (it's loaded in load_rag_data and passed here)
-            if embedder is None:
-                 print("❌ Embedder model is not loaded. Cannot perform semantic search.")
-                 st.error("Embedding model is not loaded. Cannot perform semantic search.")
-                 return [] # Return empty context if model is missing
-
-            query_embedding = embedder.encode([question], convert_to_tensor=False).astype('float32') # Ensure numpy float32
-            faiss.normalize_L2(query_embedding) # Normalize for Inner Product search
-            k_semantic = 7 # Number of semantic chunks to retrieve
-            # Ensure faiss_index is loaded and not None
-            if faiss_index is None:
-                 print("❌ FAISS index is not loaded. Cannot perform semantic search.")
-                 st.error("FAISS index is not loaded. Cannot perform semantic search.")
-                 return [] # Return empty context
-
-            if faiss_index.ntotal == 0:
-                 print("⚠️ FAISS index is empty. Cannot perform semantic search.")
-                 st.warning("Search index is empty. Cannot perform semantic search.")
-                 return [] # Return empty context
-
-            # Clamp k_semantic to the total number of vectors in the index if needed
-            search_k = min(k_semantic, faiss_index.ntotal)
-            if search_k == 0: return [] # No vectors to search
-
-            _, indices = faiss_index.search(np.array(query_embedding), search_k)
+            query_embedding = embedder.encode([question], convert_to_tensor=False) # Ensure numpy array
+            faiss.normalize_L2(query_embedding)
+            k_semantic = 7
+            _, indices = faiss_index.search(np.array(query_embedding).astype('float32'), k=k_semantic)
 
             # Retrieve unique chunks based on indices
             unique_chunks = set()
             for i in indices[0]:
-                # Add bounds check and check for valid index (-1 can be returned sometimes)
-                if 0 <= i < len(semantic_chunks):
+                if 0 <= i < len(semantic_chunks): # Add bounds check
                      semantic_chunk = semantic_chunks[i]
-                     if semantic_chunk.strip(): # Only add non-empty chunks
-                         unique_chunks.add(semantic_chunk.strip()) # Use strip() for uniqueness
+                     unique_chunks.add(semantic_chunk.strip()) # Use strip() for uniqueness
 
             context_chunks = list(unique_chunks) # Convert set back to list
 
@@ -481,30 +350,27 @@ def create_prompt(question, context_list, chat_history):
     history_context = ""
     # Include a reasonable amount of recent history
     if chat_history and len(chat_history) > 0:
-        # Let's take the last 4 turns (question + answer pairs)
-        recent_history = chat_history[-4:] if len(chat_history) > 4 else chat_history
+        recent_history = chat_history[-4:] if len(chat_history) > 4 else chat_history # Increased history slightly
         history_entries = []
         for entry in recent_history:
-            hist_q = entry.get('question', 'N/A')
-            # Clean up potential Streamlit markdown from previous answers
-            answer_text = str(entry.get('answer', ''))
+            answer_text = str(entry.get('answer', '')) # Ensure answer is string
+            # Clean up potential Streamlit markdown like "🔍 **Answer:**\n\n" from previous turns
             # Using re.sub with a non-greedy match and specifying count=1 for efficiency
             cleaned_answer_text = re.sub(r'🔍 \*\*Answer:\*\*(\n\n)?', '', answer_text, count=1)
             cleaned_answer_text = re.sub(r'❌ \*\*Error:\*\*(\n\n)?', '', cleaned_answer_text, count=1) # Also clean up error indicators
-            cleaned_answer_text = cleaned_answer_text.strip()
 
-            # Limit history length to avoid exceeding context window (rough estimate)
-            max_hist_len_per_turn = 400 # characters per turn in history
-            hist_entry_text = f"Previous Question: {hist_q}\nPrevious Answer: {cleaned_answer_text}"
+            # Limit history length to avoid exceeding context window
+            max_hist_len = 500 # characters per turn in history
+            hist_q = entry.get('question', 'N/A')
+            hist_a = cleaned_answer_text
 
-            if len(hist_entry_text) > max_hist_len_per_turn:
-                 # Simple truncation
-                 hist_entry_text = hist_entry_text[:max_hist_len_per_turn - 10] + "..." # -10 for "...\n"
+            if len(hist_q) + len(hist_a) > max_hist_len:
+                 # Simple truncation if needed
+                 hist_a = hist_a[:max_hist_len - len(hist_q) - 10] + "..." # -10 for "...\n"
 
-            history_entries.append(hist_entry_text)
+            history_entries.append(f"Previous Question: {hist_q}\nPrevious Answer: {hist_a}")
 
-        # Join history entries with a clear separator
-        history_context = "\n\n--- Previous Conversation Context ---\n\n" + "\n\n---\n\n".join(history_entries) + "\n\n"
+        history_context = "\n\n--- Previous Conversation Context ---\n\n" + "\n\n".join(history_entries) + "\n\n"
 
     context = "\n\n--- Retrieved Document Chunk ---\n\n".join(context_list)
 
@@ -513,61 +379,48 @@ def create_prompt(question, context_list, chat_history):
     # based on the *current* question, even if the context isn't a perfect match,
     # as the user intent is clear.
 
-    # Check if the user is asking for the exact text or title of a specific article/section
-    is_direct_request = is_direct_text_request(question)
-    is_explanation_request_flag = is_explanation_request(question)
-
-    # Add instructions for the model about its persona and source
-    persona_instruction = "You are an AI assistant specialized in Indian law, answering based *only* on the provided legal texts (Indian Constitution articles and Legal Act sections)."
-
-    if is_direct_request:
+    if is_direct_text_request(question):
         print("Direct text request detected. Using verbatim response prompt.")
-        # Refine the direct text prompt
-        return f"""{persona_instruction} Your primary task is to provide the EXACT text or title as it appears in the provided context when asked for specific articles or sections.
+        return f"""You are an AI assistant specialized in Indian law. Your primary task is to provide the EXACT text as it appears in the provided context when asked for specific articles or sections.
 
 {history_context}
-Carefully read the retrieved text below. This text may or may not contain the exact article or section you were asked about:
+Carefully read the retrieved text below:
 ---------------------
 {context}
 ---------------------
 
 Instructions:
-1. Identify if the user is asking for the *exact text* or the *title* of a specific Article or Section (e.g., "what does Article 21 state", "text of IPC Section 302", "title of Article 14").
-2. Scan the provided context *only* for the requested Article/Section number and its content/title.
-3. If the EXACT text or title for the requested Article or Section is present in the context and matches the user's request type (text vs. title), provide ONLY that exact text or title. Include the official article/section number and title exactly as shown in the text.
-4. DO NOT paraphrase, explain, or interpret the content if a direct text or title request is made and the corresponding text/title is found in the context.
-5. If the requested Article/Section text or title is NOT present in the provided context, politely mention that you don't have the specific text/title *in the context you received*. Then, share any information you *do* have from the context that might be related to the user's query or the mentioned article/section number, but be clear it's not the verbatim text/title requested.
-6. If the context is empty or completely irrelevant, state that you cannot find relevant information in the provided text.
+1. If the exact text for the requested article or section (e.g., "what does Article 21 state", "text of IPC Section 302") is present in the context, provide ONLY that exact text. Include the official article/section number and title exactly as shown in the text.
+2. DO NOT paraphrase, explain, or interpret the content if a direct text request is made and the text is found.
+3. If the requested article/section text is NOT present in the context, politely mention that you don't have the specific text and share what information you *do* have from the context that might be related to the user's query or the mentioned article/section number.
+4. Prioritize providing the exact text if available and requested.
 
 Question: {question}"""
 
-    elif is_explanation_request_flag:
+    elif is_explanation_request(question):
         print("Explanation request detected. Using detailed explanation prompt.")
-        # Refine the explanation prompt
-        return f"""{persona_instruction} Your task is to provide a DETAILED AND COMPREHENSIVE EXPLANATION of the relevant part of the law based *only* on the provided context.
+        return f"""You are an AI assistant specialized in Indian Constitutional law. Your task is to provide a DETAILED AND COMPREHENSIVE EXPLANATION of the relevant part of the law based on the provided context.
 
 {history_context}
-Carefully read the retrieved text below. This text may or may not contain the exact article or section you were asked about, but should be related:
+Carefully read the retrieved text below:
 ---------------------
 {context}
 ---------------------
 
 Instructions:
-1. Read the provided context carefully to understand the legal provisions it contains, especially if specific articles or sections are mentioned.
-2. Based *only* on the information in the context, explain the relevant legal concepts, clauses, terms, and implications in simple, accessible language.
-3. If specific articles or sections are mentioned in the context and are relevant to the user's request (e.g., explaining Article 21), explain *what the context says* about them. Cite them by number (e.g., Article 21, IPC Section 302) if they are present in the context.
-4. Use formatting (like bullet points, headings, bold text) to make your explanation clear and structured.
-5. Provide context and practical significance *based on the provided text*.
-6. Aim for a comprehensive explanation, drawing all relevant points *from the context*.
-7. If the requested explanation (e.g., of a specific article) is not possible based *only* on the provided context, politely state that and share what information you *can* explain from the text you received that might be related.
-8. If the context is empty or completely irrelevant, state that you cannot find relevant information to provide an explanation based on the provided text.
+1. Explain the content found in the context related to the user's question in simple, accessible language.
+2. Break down complex legal concepts, clauses, terms, and implications from the context.
+3. Use formatting (like bullet points, headings, bold text) to make the explanation clear and structured.
+4. If specific articles or sections are mentioned in the context and are relevant, explain them. Cite them by number (e.g., Article 21, IPC Section 302).
+5. Provide context and practical significance based on the provided text.
+6. Aim for a comprehensive explanation, drawing all relevant points from the context.
+7. If the requested explanation (e.g., of a specific article) is not possible based *only* on the provided context, politely state that and share what information you *can* explain from the text you received.
 
 Question: {question}"""
 
     # Default RAG prompt for general questions or if direct text/explanation wasn't requested
     print("Using Standard RAG prompt for general query.")
-    # Refine the standard RAG prompt
-    return f"""{persona_instruction} Answer the user's question using *only* the information found in the provided context.
+    return f"""You are an AI assistant providing information about Indian law based on the provided text chunks from the Indian Constitution and other legal acts. Answer the user's question using *only* the information found in the context.
 
 {history_context}
 Carefully read the retrieved text below:
@@ -579,10 +432,10 @@ Based on the text provided, answer the following question: {question}
 
 Instructions:
 1. Answer the question clearly and concisely, using information found *only* in the context.
-2. Use natural, conversational language unless quoting directly from the text.
-3. Use phrases like "According to the text provided...", "Based on Article X...", or "Section Y states..." to refer to the source material in the context. Cite relevant Articles or Sections if mentioned in the context and relevant to the answer.
-4. If you cannot find a complete answer *within the provided text*, state this politely. Share whatever relevant partial information *is* available in the context (e.g., "The provided text mentions Article 21 but does not directly answer your question about X"). DO NOT make up information or use outside knowledge.
-5. If the context is empty or completely irrelevant, state that you cannot find relevant information to answer the question.
+2. Use natural, conversational language rather than overly technical legal jargon unless quoting directly from the text.
+3. Use phrases like "According to the text provided...", "Based on Article X...", or "Section Y states..." to refer to the source material in the context.
+4. If specific Articles or Sections are mentioned in the context and are relevant to the answer, cite them clearly.
+5. If you cannot find a complete answer *within the provided text*, state this politely. Share whatever relevant partial information *is* available in the context (e.g., "The provided text mentions Article 21 but does not directly answer your question about X"). DO NOT make up information or use outside knowledge.
 6. Format your answer for readability.
 
 Question: {question}"""
@@ -599,9 +452,6 @@ def generate_answer(model, prompt, max_output_tokens=2048):
     Returns:
         str: The generated answer text, or an error message.
     """
-    if model is None:
-         return "Error: Language model is not loaded."
-
     try:
         generation_config = genai.types.GenerationConfig(
             candidate_count=1,
@@ -612,6 +462,7 @@ def generate_answer(model, prompt, max_output_tokens=2048):
         )
 
         # Safety settings - typically more relaxed for RAG on legal text
+        # Keep safety settings as they were
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -667,27 +518,26 @@ def generate_answer(model, prompt, max_output_tokens=2048):
 
 # --- Streamlit App Structure ---
 
-st.set_page_config(page_title="Indian Law RAG Assistant", layout="wide") # Changed title slightly
+st.set_page_config(page_title="Indian Law RAG Assistant (Colab)", layout="wide")
 
-st.title("⚖️ Indian Law RAG Assistant")
+st.title("⚖️ Indian Law RAG Assistant (Colab)")
 st.info("Ask questions about the Indian Constitution and legal acts based on the provided data.")
 
 # Load RAG data and Language Model using cached functions
 # These will run only once per Streamlit session
-rag_system_data = load_rag_data() # This now loads data AND the embedding model
-gemini_model = load_gemini_pro() # This reads from env var
+rag_system_data = load_rag_data()
+gemini_model = load_gemini_pro() # This now reads from env var
 
 # Check if setup was successful. If not, display errors and stop the app.
-# Check both the RAG data (which now includes the embedder) and the Gemini model
 if not rag_system_data or not gemini_model:
+    # Display a final critical error message if setup failed
     st.error("🔴 Critical Error: Application setup failed. Please check the console output and the error messages above.")
-    st.warning("Ensure all required data files are in the 'data' folder, the embedding model ('paraphrase-multilingual-mpnet-base-v2') can be downloaded, and that the 'GOOGLE_API_KEY' environment variable is correctly set.")
+    st.warning("Ensure all required data files are in the 'data' folder, and that the 'GOOGLE_API_KEY' environment variable is correctly set.")
     st.stop() # Stop the Streamlit app execution
 
 # Extract components for easier access (will always be available if st.stop() wasn't called)
-# Ensure embedder is extracted correctly from the loaded data
 faiss_index = rag_system_data['faiss_index']
-embedder = rag_system_data['embedder'] # Extract the loaded embedder
+embedder = rag_system_data['embedder']
 semantic_chunks = rag_system_data['semantic_chunks']
 article_map = rag_system_data['article_map']
 act_sections_map = rag_system_data['act_sections_map']
@@ -704,12 +554,12 @@ for i, chat in enumerate(st.session_state.chat_history):
     with st.chat_message("user"):
          st.markdown(chat['question'])
     with st.chat_message("assistant"):
-         # Check if the answer is the placeholder before rendering
-         if chat['answer'] == "Thinking...":
-             st.info("Thinking...") # Use st.info for the spinner/thinking message
-         else:
-             st.markdown(chat['answer']) # Display the final answer with markdown
+         st.markdown(chat['answer'])
+    # Optional: Display retrieved context for debugging/transparency
+    # with st.expander(f"Context for Turn {i+1}"):
+    #      st.json(chat.get('context', 'No context retrieved.')) # Use json for context list
 
+st.markdown("---") # Separator below chat history
 
 # Get user input using st.chat_input (preferred for chat UIs)
 # It automatically handles submission on Enter and provides the input string
@@ -723,180 +573,140 @@ if user_question:
          'question': user_question.strip(),
          'answer': "Thinking...", # Placeholder
          'context': [], # Will be filled later
-         # We don't need to store act_names per turn here, it's available globally
-         'article_reference': None, # Placeholder for extracted reference
-         'section_reference': None, # Placeholder for extracted reference
-         'act_name_reference': None # Placeholder for extracted reference
+         'act_names': act_names # Store act names relevant to this turn if needed (optional)
      })
-     # Note: The act_names list is needed by is_legal_act_query inside get_context.
-     # It's loaded into the global `rag_system_data` dictionary, so it's accessible.
-     st.rerun() # Rerun to display the user message and spinner state
+     st.rerun() # Rerun to display the user message and spinner
 
 # Logic to process the question if the last entry is the "Thinking..." placeholder
 # This runs *after* the rerun triggered by submitting the question
-# It ensures processing only happens once per user question.
 if st.session_state.chat_history and st.session_state.chat_history[-1]['answer'] == "Thinking...":
     question_to_process = st.session_state.chat_history[-1]['question']
 
-    # The spinner is now triggered by the "Thinking..." message display above.
-    # We just need the processing logic here.
+    # Use a spinner to indicate work is being done.
+    # The spinner will appear below the last displayed chat message because
+    # the "Thinking..." message is already part of the history being displayed above.
+    # Let's move the spinner into the processing block for better flow.
+    # Use a more specific message in the spinner
+    with st.spinner(f"Assistant is thinking about '{question_to_process}'..."):
+        try:
+            # --- Core Logic: Retrieve Context, Create Prompt, Generate Answer ---
 
-    try:
-        # --- Core Logic: Retrieve Context, Create Prompt, Generate Answer ---
+            print(f"\nUser Query: {question_to_process}") # Console print
+            print("🔎 Retrieving relevant context...") # Console print
 
-        print(f"\nUser Query: {question_to_process}") # Console print
-        print("🔎 Retrieving relevant context...") # Console print
-
-        # Pass history to get_context (exclude the current "Thinking..." turn)
-        history_for_context = st.session_state.chat_history[:-1]
-
-        # Check if embedder or faiss_index are None before calling get_context
-        if embedder is None or faiss_index is None:
-            answer = "❌ **Error:** Embedding model or search index is not loaded. Cannot process your query."
-            print("❌ Cannot call get_context: Embedder or FAISS index is None.")
-            st.session_state.chat_history[-1]['answer'] = answer
-            st.rerun() # Update UI with error
-            st.stop() # Stop further execution for this turn
-
-        context = get_context(
-            question_to_process,
-            faiss_index,
-            embedder,
-            semantic_chunks,
-            article_map,
-            act_sections_map,
-            act_names, # Pass act_names
-            history_for_context # Pass previous turns
-        )
-
-        # --- Update history with extracted references *before* generating answer ---
-        # Extract referenced article or section from the *original* question
-        is_article, article_num = is_article_specific_query(question_to_process)
-        if is_article:
-            st.session_state.chat_history[-1]['article_reference'] = article_num
-            print(f"Storing article reference for history: {article_num}")
-
-        section_match = re.search(r'\bsection\s+(\d+)([a-z]?)', question_to_process.lower())
-        if section_match:
-            section_num = section_match.group(1) + (section_match.group(2) if section_match.group(2) else "")
-            st.session_state.chat_history[-1]['section_reference'] = section_num
-            print(f"Storing section reference for history: {section_num}")
-            # Try to find act name in the original question too for history
-            act_name_in_q = None
-            for act_name_check in act_names:
-                 cleaned_act_name_check = re.sub(r',\s*\d{4}$', '', act_name_check).strip().lower()
-                 if re.search(r'\b' + re.escape(cleaned_act_name_check) + r'\b', question_to_process.lower()):
-                      act_name_in_q = act_name_check
-                      break
-            if act_name_in_q:
-                 st.session_state.chat_history[-1]['act_name_reference'] = act_name_in_q
-                 print(f"Storing act name reference for history: {act_name_in_q}")
-
-
-        # --- Generate Answer ---
-        if not context:
-            print("⚠️ No relevant context found for this query.") # Console print
-            # Provide helpful suggestions based on available data
-            available_articles = []
-            # Collect article numbers from map keys
-            for key in article_map.keys():
-                match = re.search(r'article\s+(\d+[a-z]?)', key.lower())
-                if match:
-                    article_num = match.group(1)
-                    if article_num not in available_articles:
-                        available_articles.append(article_num)
-            # Sort numerically for better presentation
-            try:
-                available_articles.sort(key=lambda x: int(re.match(r'(\d+)', x).group(1)) if re.match(r'^\d+', x) else x)
-            except:
-                # Fallback sort if numeric sort fails
-                available_articles.sort()
-
-            articles_sample = ", ".join(available_articles[:20]) + ("..." if len(available_articles) > 20 else "") # Display sample articles
-
-            # Collect Act names from the loaded list
-            act_names_list = list(act_names)
-            act_names_sample = ", ".join(act_names_list) + ("..." if len(act_names_list) > 5 else "") # Display sample act names
-
-
-            answer = (
-                f"🔍 **Answer:**\n\nI apologize, but I couldn't find enough relevant information in my current knowledge base to answer your question about '{question_to_process.strip()}'. "
-                "My data primarily covers articles from the Indian Constitution and relevant legal acts.\n\n"
-                "Could you try asking about a specific article number (e.g., Article 21), a legal act by name (e.g., Indian Penal Code), or a specific section within an act (e.g., IPC Section 302)?\n\n"
-                f"Articles covered include: {articles_sample}\n\n"
-                f"Legal Acts covered include: {act_names_sample}"
+            # Pass history to get_context (exclude the current "Thinking..." turn)
+            # Need to pass a copy or slice up to the second to last element
+            history_for_context = st.session_state.chat_history[:-1] if len(st.session_state.chat_history) > 1 else []
+            context = get_context(
+                question_to_process,
+                faiss_index,
+                embedder,
+                semantic_chunks,
+                article_map,
+                act_sections_map,
+                act_names,
+                history_for_context # Pass previous turns
             )
-            print("Generated 'No context found' answer.")
+
+            if not context:
+                print("⚠️ No relevant context found for this query.") # Console print
+                # Provide helpful suggestions based on available data
+                available_articles = []
+                # Collect article numbers
+                for key in article_map.keys():
+                    match = re.search(r'article\s+(\d+[a-z]?)', key.lower())
+                    if match:
+                        article_num = match.group(1)
+                        if article_num not in available_articles:
+                            available_articles.append(article_num)
+                # Sort numerically for better presentation
+                try:
+                    available_articles.sort(key=lambda x: int(re.match(r'(\d+)', x).group(1)) if re.match(r'^\d+', x) else x)
+                except:
+                    # Fallback sort if numeric sort fails
+                    available_articles.sort()
+
+                articles_sample = ", ".join(available_articles[:20]) # Display sample articles
+
+                # Collect Act names
+                act_names_list = list(act_names) # act_names is a set
+                act_names_sample = ", ".join(act_names_list)
 
 
-            # Update the last history entry with the final answer and no context
-            st.session_state.chat_history[-1]['answer'] = answer
-            st.session_state.chat_history[-1]['context'] = [] # No context for this case
+                answer = f"🔍 **Answer:**\n\nI apologize, but I don't have enough relevant information in my current knowledge base to answer your question about '{question_to_process.strip()}'. My data primarily covers articles from the Indian Constitution and relevant legal acts.\n\nCould you try asking about a specific article (e.g., Article 21), a legal act (e.g., Indian Penal Code), or a section within an act (e.g., IPC Section 302)?\n\nArticles covered include: {articles_sample}... Legal Acts covered include: {act_names_sample}."
 
-        else: # Context was found
-            print(f"✅ Retrieved {len(context)} context chunks for generation.") # Console print
-            print("💭 Generating answer with Gemini...") # Console print
+                # Update the last history entry with the final answer and no context
+                st.session_state.chat_history[-1]['answer'] = answer
+                st.session_state.chat_history[-1]['context'] = [] # No context for this error case
 
-            # Pass history to create_prompt (exclude the current "Thinking..." turn)
-            prompt = create_prompt(question_to_process, context, history_for_context) # Pass previous turns
+            else: # Context was found
+                print(f"✅ Retrieved {len(context)} context chunks.") # Console print
+                print("💭 Generating answer...") # Console print
 
-            answer = generate_answer(gemini_model, prompt)
-            formatted_answer = f"🔍 **Answer:**\n\n{answer}" # Add Markdown formatting
-            print("Generated Gemini answer.")
+                # Pass history to create_prompt (exclude the current "Thinking..." turn)
+                prompt = create_prompt(question_to_process, context, history_for_context) # Pass previous turns
 
-            # Update the last history entry
-            st.session_state.chat_history[-1]['answer'] = formatted_answer
-            st.session_state.chat_history[-1]['context'] = context # Store retrieved context for potential inspection
+                answer = generate_answer(gemini_model, prompt)
+                formatted_answer = f"🔍 **Answer:**\n\n{answer}" # Add Markdown formatting
 
+                # Update the last history entry
+                st.session_state.chat_history[-1]['answer'] = formatted_answer
+                st.session_state.chat_history[-1]['context'] = context # Store retrieved context for potential inspection
 
-        # Keep chat history to a reasonable size (e.g., last 10 interactions)
-        # Pop from the beginning if history exceeds the limit
-        while len(st.session_state.chat_history) > 10:
-             st.session_state.chat_history.pop(0)
-             print("Trimmed chat history.")
+                # Extract referenced article or section from the *original* question for better follow-up handling
+                # (The expanded question used for retrieval might be too long or modified)
+                is_article, article_num = is_article_specific_query(st.session_state.chat_history[-1]['question'])
+                if is_article:
+                    st.session_state.chat_history[-1]['article_reference'] = article_num
 
-        # Rerun to update the display with the final answer and remove the spinner state
-        st.rerun()
-
-    except Exception as e:
-        # Handle errors during retrieval or generation
-        error_message = f"Sorry, an error occurred during processing: {str(e)}"
-        st.error(error_message) # Display error in the UI
-        st.exception(e) # Show traceback in the Streamlit UI (useful for debugging)
-
-        # Update the last history entry with the error message
-        st.session_state.chat_history[-1]['answer'] = f"❌ **Error:** {error_message}"
-        st.session_state.chat_history[-1]['context'] = [] # Clear context on error
-        st.session_state.chat_history[-1]['article_reference'] = None # Clear references on error
-        st.session_state.chat_history[-1]['section_reference'] = None
-        st.session_state.chat_history[-1]['act_name_reference'] = None
-        print(f"Error processing query: {e}\n{traceback.format_exc()}")
+                section_match = re.search(r'\bsection\s+(\d+)([a-z]?)', st.session_state.chat_history[-1]['question'].lower())
+                if section_match:
+                    section_num = section_match.group(1) + (section_match.group(2) if section_match.group(2) else "")
+                    st.session_state.chat_history[-1]['section_reference'] = section_num
 
 
-        # Rerun to show the error message in the chat history
-        st.rerun()
+            # Keep chat history to a reasonable size (e.g., last 10 interactions)
+            # Pop from the beginning if history exceeds the limit
+            while len(st.session_state.chat_history) > 10:
+                 st.session_state.chat_history.pop(0)
+
+            # Rerun to update the display with the final answer and remove the spinner
+            st.rerun()
+
+        except Exception as e:
+            # Handle errors during retrieval or generation
+            error_message = f"Sorry, an error occurred during processing: {str(e)}"
+            st.error(error_message) # Display error in the UI
+            st.exception(e) # Show traceback in the Streamlit UI (useful for debugging)
+
+            # Update the last history entry with the error message
+            st.session_state.chat_history[-1]['answer'] = f"❌ **Error:** {error_message}"
+            st.session_state.chat_history[-1]['context'] = [] # Clear context on error
+
+            # Rerun to show the error message in the chat history
+            st.rerun()
 
 
 # Add a sidebar with instructions and examples
 st.sidebar.title("About")
 st.sidebar.info(
-    "This AI-powered chatbot is built to assist users with fast, accurate legal information based on the Indian Constitution and important legal Acts such as the IPC, CrPC, Evidence Act, and more. Whether you're preparing for the AIBE (All India Bar Examination), studying law, or practicing as a legal professional, this tool is designed to simplify your legal research by delivering clear answers to your queries — one Article or one Act section at a time.\n\n"
-    "The chatbot offers a user-friendly interface where you can ask questions like “What does Article 19 say?” or “Explain Section 300 of IPC.” It responds instantly using official legal texts, making it a valuable resource for revision, case preparation, and academic learning. Please note: to maintain precision and clarity, the chatbot supports only one Article or one Act-based question at a time."
+    "This is a RAG (Retrieval Augmented Generation) application running in Google Colab, using the Gemini 2.0 Flash model to answer questions about Indian law.\n\n"
+    "It retrieves relevant context from a pre-indexed corpus (Constitution Articles, Legal Act Sections) and uses the language model to generate an answer based on the retrieved text.\n\n"
+    "To run this in Google Colab:\n"
+    "1. Ensure you have the `data` folder containing the processed data files in the same directory as `app.py`.\n"
+    "2. Add your Gemini API key as a Colab Secret named `GOOGLE_API_KEY` (🔑 icon on the left).\n"
+    "3. Run the Colab cell containing the code to save this script (`%%writefile app.py`).\n"
+    "4. Run the Colab cell containing the command to launch the app using `!GOOGLE_API_KEY=\"$GOOGLE_API_KEY\" streamlit run app.py & npx localtunnel --port 8501` (You need to fetch the key from userdata in the cell first, as shown in the example launch code).\n"
+    "5. Click the generated `loca.lt` URL."
 )
 
-st.sidebar.title("The CHAT-BOT has the access to data of all these:-")
-st.sidebar.write("- Indian Constitution(article 1 - 395")
-st.sidebar.write("- Indian Penal Code, 1860 (IPC)")
-st.sidebar.write("- Contract Act, 1872")
-st.sidebar.write("- Advocates Act, 1961")
-st.sidebar.write("- Right to Information Act, 2005")
-st.sidebar.write("- Consumer Protection Act, 2019")
-st.sidebar.write("- Family Laws (Hindu Marriage Act, Hindu Succession Act, Muslim Personal Laws, etc.)")
-st.sidebar.write("- Specific Relief Act, 1963")
-st.sidebar.write("- Environment Protection Act, 1986") # Example follow-up
-st.sidebar.write("- Intellectual Property Laws (Copyright, Trademark, Patent Acts)")
-st.sidebar.write("- Bharatiya Nyaya Sanhita, 2023")
-st.sidebar.write("- Bharatiya Nagarik Suraksha Sanhita, 2023")
-st.sidebar.write("- Bharatiya Sakshya Adhiniyam, 2023") # Example section lookup without explicit act name (if section number is unique enough or in context)
-# Example section lookup without explicit act name (if section number is unique enough or in context)
-# Example section lookup without explicit act name (if section number is unique enough or in context)
+st.sidebar.title("Examples")
+st.sidebar.write("- What is the right to equality?")
+st.sidebar.write("- What does Article 21 state?")
+st.sidebar.write("- Explain Article 21 in detail")
+st.sidebar.write("- Would someone qualify for citizenship under Article 6 if they migrated in 1947?")
+st.sidebar.write("- What are the sections related to theft in the Indian Penal Code?")
+st.sidebar.write("- What does Indian Penal Code Section 302 say?")
+st.sidebar.write("- What is covered in the Constitution of India?")
+st.sidebar.write("- What does it mean?") # Example follow-up
+st.sidebar.write("- What are the fundamental rights?")
