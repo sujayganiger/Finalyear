@@ -880,26 +880,23 @@ if st.session_state.chat_history and st.session_state.chat_history[-1]['answer']
 # Add a sidebar with instructions and examples
 st.sidebar.title("About")
 st.sidebar.info(
-    "This is a RAG (Retrieval Augmented Generation) application running in Google Colab or similar environments, using the Gemini 2.0 Flash model to answer questions about Indian law.\n\n"
-    "It retrieves relevant context from a pre-indexed corpus (Constitution Articles, Legal Act Sections) using semantic search and direct lookup, and uses the language model to generate an answer based *only* on the retrieved text.\n\n"
-    "The embedding model ('paraphrase-multilingual-mpnet-base-v2') is loaded directly from Hugging Face at runtime, avoiding the need to store its large files in your Git repository.\n\n"
-    "**To run this:**\n"
-    "1. Ensure you have run the data preparation script separately to create the `data` folder with `article_map.pkl`, `act_sections_map.pkl`, `act_names.pkl`, `semantic_chunks.pkl`, and `faiss_index.bin`.\n"
-    "2. Add your Gemini API key as a Colab Secret named `GOOGLE_API_KEY` (🔑 icon) or set it as an environment variable `GOOGLE_API_KEY` when running outside Colab.\n"
-    "3. If in Colab, run the cell with `%%writefile app.py`.\n"
-    "4. If in Colab, run the launch command (e.g., `!GOOGLE_API_KEY=\"$GOOGLE_API_KEY\" streamlit run app.py & npx localtunnel --port 8501`).\n"
-    "5. Click the generated URL."
+    "This AI-powered chatbot is built to assist users with fast, accurate legal information based on the Indian Constitution and important legal Acts such as the IPC, CrPC, Evidence Act, and more. Whether you're preparing for the AIBE (All India Bar Examination), studying law, or practicing as a legal professional, this tool is designed to simplify your legal research by delivering clear answers to your queries — one Article or one Act section at a time.\n\n"
+    "The chatbot offers a user-friendly interface where you can ask questions like “What does Article 19 say?” or “Explain Section 300 of IPC.” It responds instantly using official legal texts, making it a valuable resource for revision, case preparation, and academic learning. Please note: to maintain precision and clarity, the chatbot supports only one Article or one Act-based question at a time."
 )
 
-st.sidebar.title("Examples")
-st.sidebar.write("- What is the right to equality?")
-st.sidebar.write("- What does Article 21 state?")
-st.sidebar.write("- Explain Article 21 in detail")
-st.sidebar.write("- Would someone qualify for citizenship under Article 6 if they migrated in 1947?")
-st.sidebar.write("- What are the sections related to theft in the Indian Penal Code?")
-st.sidebar.write("- What does Indian Penal Code Section 302 say?")
-st.sidebar.write("- Explain Section 420 of the IPC")
-st.sidebar.write("- What is covered in the Constitution of India?")
-st.sidebar.write("- What does it mean?") # Example follow-up
-st.sidebar.write("- What are the fundamental rights?")
-st.sidebar.write("- Tell me about Section 124A") # Example section lookup without explicit act name (if section number is unique enough or in context)
+st.sidebar.title("The CHAT-BOT has the access to data of all these:-")
+st.sidebar.write("- Indian Constitution(article 1 - 395")
+st.sidebar.write("- Indian Penal Code, 1860 (IPC)")
+st.sidebar.write("- Contract Act, 1872")
+st.sidebar.write("- Advocates Act, 1961")
+st.sidebar.write("- Right to Information Act, 2005")
+st.sidebar.write("- Consumer Protection Act, 2019")
+st.sidebar.write("- Family Laws (Hindu Marriage Act, Hindu Succession Act, Muslim Personal Laws, etc.)")
+st.sidebar.write("- Specific Relief Act, 1963")
+st.sidebar.write("- Environment Protection Act, 1986") # Example follow-up
+st.sidebar.write("- Intellectual Property Laws (Copyright, Trademark, Patent Acts)")
+st.sidebar.write("- Bharatiya Nyaya Sanhita, 2023")
+st.sidebar.write("- Bharatiya Nagarik Suraksha Sanhita, 2023")
+st.sidebar.write("- Bharatiya Sakshya Adhiniyam, 2023") # Example section lookup without explicit act name (if section number is unique enough or in context)
+# Example section lookup without explicit act name (if section number is unique enough or in context)
+# Example section lookup without explicit act name (if section number is unique enough or in context)
