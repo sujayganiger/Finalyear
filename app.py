@@ -880,7 +880,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1]['answer']
 # Add a sidebar with instructions and examples
 st.sidebar.title("About")
 st.sidebar.info(
-    "This is a RAG (Retrieval Augmented Generation) application running in Google Colab or similar environments, using the Gemini 2.0 Flash model to answer questions about Indian law.\n\n"
+    "This AI-powered chatbot is built to assist users with fast, accurate legal information based on the Indian Constitution and important legal Acts such as the IPC, CrPC, Evidence Act, and more. Whether you're preparing for the AIBE (All India Bar Examination), studying law, or practicing as a legal professional, this tool is designed to simplify your legal research by delivering clear answers to your queries — one Article or one Act section at a time.\n\n"
     "It retrieves relevant context from a pre-indexed corpus (Constitution Articles, Legal Act Sections) using semantic search and direct lookup, and uses the language model to generate an answer based *only* on the retrieved text.\n\n"
     "The embedding model ('paraphrase-multilingual-mpnet-base-v2') is loaded directly from Hugging Face at runtime, avoiding the need to store its large files in your Git repository.\n\n"
     "**To run this:**\n"
